@@ -1,9 +1,15 @@
 /* Defines an abstraction over the link protocols that handles specifics related to the Cryomech API */
 
-use anyhow::anyhow;
+use anyhow::{Result, anyhow};
 use smdp::{SmdpPacketV1, SmdpPacketV2};
 
 const SMDP_OPCODE: u8 = 0x80;
+pub(crate) enum RequestType {
+    Read,
+    /// Writes to dictionary values need data along with the
+    /// dictionary hash/idx
+    Write(u32),
+}
 
 /// Cryomech specific wrapper for SMDP packet format.
 #[derive(Debug, Clone, PartialEq)]
@@ -13,8 +19,29 @@ pub(crate) struct CPacketSmdp {
     srlno: Option<u8>,
 }
 impl CPacketSmdp {
-    pub fn new(addr: u8, srlno: Option<u8>, data: Vec<u8>) -> Self {
+    pub(crate) fn new(
+        addr: u8,
+        srlno: Option<u8>,
+        req_type: RequestType,
+        hashval: u16,
+        array_idx: u8,
+    ) -> Self {
+        let (req_type_val, dict_write_data) = match req_type {
+            RequestType::Read => (0x63u8, None),
+            RequestType::Write(d) => (0x61, Some(d)),
+        };
+
+        let mut data = Vec::new();
+        data.push(req_type_val);
+        data.extend_from_slice(&hashval.to_be_bytes());
+        data.push(array_idx);
+        if let Some(dict_data) = dict_write_data {
+            data.extend_from_slice(&dict_data.to_be_bytes());
+        }
         Self { addr, data, srlno }
+    }
+    pub(crate) fn extract_data(&self) -> Result<u32> {
+        todo!()
     }
 }
 impl From<CPacketSmdp> for SmdpPacketV1 {
@@ -58,7 +85,11 @@ mod test {
 
     #[test]
     fn test_cpkt_into_smdpv1() {
-        let cpkt = CPacketSmdp::new(0x10, None, vec![1, 2, 3]);
+        let cpkt = CPacketSmdp {
+            addr: 0x10,
+            srlno: None,
+            data: vec![1, 2, 3],
+        };
         let smdpv1_pkt: SmdpPacketV1 = cpkt.clone().into();
         assert_eq!(smdpv1_pkt.data(), cpkt.data);
         assert_eq!(smdpv1_pkt.addr(), cpkt.addr);
@@ -66,7 +97,11 @@ mod test {
     }
     #[test]
     fn test_cpkt_into_smdpv2_ok() {
-        let cpkt = CPacketSmdp::new(0x10, Some(0x10), vec![1, 2, 3]);
+        let cpkt = CPacketSmdp {
+            addr: 0x10,
+            srlno: Some(0x17),
+            data: vec![1, 2, 3],
+        };
         let smdpv2_pkt: SmdpPacketV2 = cpkt.clone().try_into().unwrap();
         assert_eq!(smdpv2_pkt.data(), cpkt.data);
         assert_eq!(smdpv2_pkt.addr(), cpkt.addr);
@@ -75,7 +110,11 @@ mod test {
     }
     #[test]
     fn test_cpkt_into_smdpv2_err() {
-        let cpkt = CPacketSmdp::new(0x10, None, vec![1, 2, 3]);
+        let cpkt = CPacketSmdp {
+            addr: 0x10,
+            srlno: None,
+            data: vec![1, 2, 3],
+        };
         let result: Result<SmdpPacketV2, _> = cpkt.try_into();
         assert!(result.is_err());
     }
