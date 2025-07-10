@@ -41,7 +41,24 @@ impl CPacketSmdp {
         Self { addr, data, srlno }
     }
     pub(crate) fn extract_data(&self) -> Result<u32> {
-        todo!()
+        // A well-formed response containing data should be 8-bytes
+        if self.data.len() == 8 {
+            self.data
+                .get(4..)
+                .and_then(|slice| slice.try_into().ok())
+                .map(u32::from_be_bytes)
+                .ok_or(anyhow!("Index into response data invalid."))
+        } else {
+            Err(anyhow!(
+                "Response is malformed or is not a response packet."
+            ))
+        }
+    }
+    pub(crate) fn set_srlno(&mut self, srlno: u8) {
+        self.srlno = Some(srlno)
+    }
+    pub(crate) fn get_srlno(&self) -> Option<u8> {
+        self.srlno
     }
 }
 impl From<CPacketSmdp> for SmdpPacketV1 {
