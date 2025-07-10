@@ -5,12 +5,6 @@ use smdp::{SmdpPacketV1, SmdpPacketV2};
 
 const SMDP_OPCODE: u8 = 0x80;
 
-pub enum SmdpVersion {
-    // Version 1 has no SRLNO field
-    V1,
-    // Versions 2 and above have SRLNO field
-    V2Plus,
-}
 /// Cryomech specific wrapper for SMDP packet format.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CPacketSmdp {
