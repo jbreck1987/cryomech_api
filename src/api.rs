@@ -42,3 +42,50 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         })
     }
 }
+
+pub struct CryomechApiSmdpBuilder {
+    read_timeout: usize,
+    baud: u32,
+    com_port: String,
+    dev_addr: u8,
+    max_framesize: usize,
+    version: SmdpVersion,
+}
+impl CryomechApiSmdpBuilder {
+    pub fn new(com_port: &str, dev_addr: u8) -> Self {
+        Self {
+            read_timeout: 80,
+            baud: 115200,
+            com_port: com_port.into(),
+            dev_addr,
+            max_framesize: 64,
+            version: SmdpVersion::V1,
+        }
+    }
+    pub fn read_timeout_ms(mut self, timeout: usize) -> Self {
+        self.read_timeout = timeout;
+        self
+    }
+    pub fn version(mut self, version: SmdpVersion) -> Self {
+        self.version = version;
+        self
+    }
+    pub fn baud(mut self, baud: u32) -> Self {
+        self.baud = baud;
+        self
+    }
+    pub fn max_framesize(mut self, size: usize) -> Self {
+        self.max_framesize = size;
+        self
+    }
+    pub fn build(self) -> Result<CryomechApiSmdp<Box<dyn SerialPort>>> {
+        CryomechApiSmdp::new(
+            &self.com_port,
+            self.baud,
+            self.read_timeout,
+            self.dev_addr,
+            self.max_framesize,
+            self.version,
+        )
+    }
+}
