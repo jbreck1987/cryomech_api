@@ -1,10 +1,11 @@
-use std::io::{Read, Write};
-
 /* The user facing API for communication with Cryomech compressors */
+
 use anyhow::Result;
 use serialport::SerialPort;
 use smdp::SmdpPacketHandler;
+use std::io::{Read, Write};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SmdpVersion {
     // Version 1 has no SRLNO field
     V1,
@@ -13,6 +14,7 @@ pub enum SmdpVersion {
 }
 
 /// SMDP API to Cryomech devices. Assumes point-to-point communication, not multi-drop.
+#[derive(Debug)]
 pub struct CryomechApiSmdp<T: Read + Write> {
     smdp_handler: SmdpPacketHandler<T>,
     read_timeout: usize,
@@ -38,8 +40,132 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             com_port: com_port.into(),
             dev_addr,
             version,
-            srlno: 0,
+            srlno: 0x17,
         })
+    }
+}
+
+/* READ-ONLY METHODS */
+impl CryomechApiSmdp<Box<dyn SerialPort>> {
+    /// Firmware checksum
+    pub fn fw_checksum(&mut self) -> Result<String> {
+        todo!()
+    }
+    /// True if nonvolatile memory was lost
+    pub fn mem_loss(&mut self) -> Result<bool> {
+        todo!()
+    }
+    /// CPU temperature (°C)
+    pub fn cpu_temp(&mut self) -> Result<f32> {
+        todo!()
+    }
+    /// True if clock battery OK
+    pub fn clock_batt_ok(&mut self) -> Result<bool> {
+        todo!()
+    }
+    /// True if clock battery low
+    pub fn clock_batt_low(&mut self) -> Result<bool> {
+        todo!()
+    }
+    /// Elapsed compressor minutes
+    pub fn comp_minutes(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// Compressor motor current draw, in Amps
+    pub fn motor_current_amps(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn input_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn output_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn helium_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn oil_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn min_input_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn min_output_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn min_helium_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn min_oil_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn max_input_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn max_output_water_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn max_helium_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In °C
+    pub fn max_oil_temp(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn high_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn low_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn max_high_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn max_low_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn min_high_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn min_low_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn avg_high_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn avg_low_side_pressure(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// In PSI Absolute
+    pub fn high_side_pressure_deriv(&mut self) -> Result<u32> {
+        todo!()
+    }
+    /// True if the compressor is actively running
+    pub fn comp_on(&mut self) -> Result<bool> {
+        todo!()
+    }
+    /// True indicates one or more active errors or warnings.
+    pub fn err_code_status(&mut self) -> Result<bool> {
+        todo!()
     }
 }
 
@@ -88,4 +214,9 @@ impl CryomechApiSmdpBuilder {
             self.version,
         )
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
 }
