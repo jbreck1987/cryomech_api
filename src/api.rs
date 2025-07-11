@@ -6,7 +6,6 @@ use serialport::SerialPort;
 use smdp::{SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
 use std::{
     io::{Read, Write},
-    ops::Not,
     time::Duration,
 };
 
@@ -47,6 +46,12 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             version,
             srlno: 0x17,
         })
+    }
+    pub fn read_timeout(&self) -> usize {
+        self.read_timeout
+    }
+    pub fn com_port(&self) -> &str {
+        &self.com_port
     }
     /// Increments SRLNO using appropriate logic (valid SRLNO: [16 - 255]). Returns the current
     /// value of the srlno for use.
@@ -362,18 +367,22 @@ pub struct CryomechApiSmdpBuilder {
     version: SmdpVersion,
 }
 impl CryomechApiSmdpBuilder {
-    pub fn new(com_port: &str, dev_addr: u8) -> Self {
+    pub fn new(com_port: &str) -> Self {
         Self {
             read_timeout: 80,
             baud: 115200,
             com_port: com_port.into(),
-            dev_addr,
+            dev_addr: 0x10,
             max_framesize: 64,
             version: SmdpVersion::V1,
         }
     }
     pub fn read_timeout_ms(mut self, timeout: usize) -> Self {
         self.read_timeout = timeout;
+        self
+    }
+    pub fn device_addr(mut self, addr: u8) -> Self {
+        self.dev_addr = addr;
         self
     }
     pub fn version(mut self, version: SmdpVersion) -> Self {
@@ -398,9 +407,4 @@ impl CryomechApiSmdpBuilder {
             self.version,
         )
     }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
 }
