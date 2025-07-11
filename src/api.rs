@@ -3,7 +3,7 @@
 use crate::packet::{CPacketSmdp, RequestType};
 use anyhow::{Result, anyhow};
 use serialport::SerialPort;
-use smdp::{SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
+use smdp::{SmdpPacketHandler, SmdpPacketV2, SmdpPacketV3, format::ResponseCode};
 use std::{
     io::{Read, Write},
     time::Duration,
@@ -80,9 +80,9 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         // Write and read to/from wire and convert back into CPacketSmdp
         let resp_cpkt: CPacketSmdp = match self.version {
             SmdpVersion::V1 => {
-                let req_smdp: SmdpPacketV1 = cpkt.into();
+                let req_smdp: SmdpPacketV2 = cpkt.into();
                 self.smdp_handler.write_once(&req_smdp)?;
-                let resp_smdp: SmdpPacketV1 = self.smdp_handler.poll_once()?;
+                let resp_smdp: SmdpPacketV2 = self.smdp_handler.poll_once()?;
                 match resp_smdp.rsp()? {
                     ResponseCode::Ok => resp_smdp.into(),
                     other => return Err(anyhow!("RSP not OK: {:?}", other)),
@@ -90,9 +90,9 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             }
             SmdpVersion::V2Plus => {
                 cpkt.set_srlno(self.increment_srlno());
-                let req_smdp: SmdpPacketV2 = cpkt.try_into().expect("Just set srlno");
+                let req_smdp: SmdpPacketV3 = cpkt.try_into().expect("Just set srlno");
                 self.smdp_handler.write_once(&req_smdp)?;
-                let resp_smdp: SmdpPacketV2 = self.smdp_handler.poll_once()?;
+                let resp_smdp: SmdpPacketV3 = self.smdp_handler.poll_once()?;
                 if resp_smdp.srlno() != req_smdp.srlno() {
                     return Err(anyhow!("SRLNO mismatch"));
                 }

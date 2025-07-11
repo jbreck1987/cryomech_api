@@ -1,7 +1,7 @@
 /* Defines an abstraction over the link protocols that handles specifics related to the Cryomech API */
 
 use anyhow::{Result, anyhow};
-use smdp::{SmdpPacketV1, SmdpPacketV2};
+use smdp::{SmdpPacketV2, SmdpPacketV3};
 
 const SMDP_OPCODE: u8 = 0x80;
 pub(crate) enum RequestType {
@@ -62,24 +62,24 @@ impl CPacketSmdp {
         self.srlno = Some(srlno)
     }
 }
-impl From<CPacketSmdp> for SmdpPacketV1 {
+impl From<CPacketSmdp> for SmdpPacketV2 {
     fn from(cpkt: CPacketSmdp) -> Self {
-        SmdpPacketV1::new(cpkt.addr, SMDP_OPCODE, cpkt.data)
+        SmdpPacketV2::new(cpkt.addr, SMDP_OPCODE, cpkt.data)
     }
 }
-impl TryFrom<CPacketSmdp> for SmdpPacketV2 {
+impl TryFrom<CPacketSmdp> for SmdpPacketV3 {
     type Error = anyhow::Error;
 
     fn try_from(cpkt: CPacketSmdp) -> Result<Self, Self::Error> {
         if let Some(srlno) = cpkt.srlno {
-            Ok(SmdpPacketV2::new(cpkt.addr, SMDP_OPCODE, srlno, cpkt.data))
+            Ok(SmdpPacketV3::new(cpkt.addr, SMDP_OPCODE, srlno, cpkt.data))
         } else {
             Err(anyhow!("Packet has no serial number."))
         }
     }
 }
-impl From<SmdpPacketV1> for CPacketSmdp {
-    fn from(pkt: SmdpPacketV1) -> Self {
+impl From<SmdpPacketV2> for CPacketSmdp {
+    fn from(pkt: SmdpPacketV2) -> Self {
         Self {
             addr: pkt.addr(),
             data: Vec::from(pkt.data()),
@@ -87,8 +87,8 @@ impl From<SmdpPacketV1> for CPacketSmdp {
         }
     }
 }
-impl From<SmdpPacketV2> for CPacketSmdp {
-    fn from(pkt: SmdpPacketV2) -> Self {
+impl From<SmdpPacketV3> for CPacketSmdp {
+    fn from(pkt: SmdpPacketV3) -> Self {
         Self {
             addr: pkt.addr(),
             data: Vec::from(pkt.data()),
@@ -108,7 +108,7 @@ mod test {
             srlno: None,
             data: vec![1, 2, 3],
         };
-        let smdpv1_pkt: SmdpPacketV1 = cpkt.clone().into();
+        let smdpv1_pkt: SmdpPacketV2 = cpkt.clone().into();
         assert_eq!(smdpv1_pkt.data(), cpkt.data);
         assert_eq!(smdpv1_pkt.addr(), cpkt.addr);
         assert_eq!(smdpv1_pkt.cmd_rsp(), SMDP_OPCODE);
@@ -120,7 +120,7 @@ mod test {
             srlno: Some(0x17),
             data: vec![1, 2, 3],
         };
-        let smdpv2_pkt: SmdpPacketV2 = cpkt.clone().try_into().unwrap();
+        let smdpv2_pkt: SmdpPacketV3 = cpkt.clone().try_into().unwrap();
         assert_eq!(smdpv2_pkt.data(), cpkt.data);
         assert_eq!(smdpv2_pkt.addr(), cpkt.addr);
         assert_eq!(smdpv2_pkt.cmd_rsp(), SMDP_OPCODE);
@@ -133,14 +133,14 @@ mod test {
             srlno: None,
             data: vec![1, 2, 3],
         };
-        let result: Result<SmdpPacketV2, _> = cpkt.try_into();
+        let result: Result<SmdpPacketV3, _> = cpkt.try_into();
         assert!(result.is_err());
     }
     #[test]
     fn test_smdpv1_into_cpkt() {
         let addr = 0x20;
         let data = vec![4, 5, 6];
-        let smdpv1_pkt = SmdpPacketV1::new(addr, SMDP_OPCODE, data.clone());
+        let smdpv1_pkt = SmdpPacketV2::new(addr, SMDP_OPCODE, data.clone());
         let cpkt: CPacketSmdp = smdpv1_pkt.into();
         assert_eq!(cpkt.addr, addr);
         assert_eq!(cpkt.data, data);
@@ -152,7 +152,7 @@ mod test {
         let addr = 0x30;
         let srlno = 0x42;
         let data = vec![7, 8, 9];
-        let smdpv2_pkt = SmdpPacketV2::new(addr, SMDP_OPCODE, srlno, data.clone());
+        let smdpv2_pkt = SmdpPacketV3::new(addr, SMDP_OPCODE, srlno, data.clone());
         let cpkt: CPacketSmdp = smdpv2_pkt.into();
         assert_eq!(cpkt.addr, addr);
         assert_eq!(cpkt.data, data);
