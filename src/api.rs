@@ -4,7 +4,11 @@ use crate::packet::{CPacketSmdp, RequestType};
 use anyhow::{Result, anyhow};
 use serialport::SerialPort;
 use smdp::{SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
-use std::io::{Read, Write};
+use std::{
+    io::{Read, Write},
+    ops::Not,
+    time::Duration,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SmdpVersion {
@@ -121,7 +125,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         let data = self
             .comm_handler(RequestType::Read, 0x3574, 0x00)?
             .ok_or(anyhow!("Expected data in response got none."))?;
-        Ok(data as f32)
+        Ok(data as f32 * 0.1)
     }
     /// True if clock battery OK
     pub fn clock_batt_ok(&mut self) -> Result<bool> {
@@ -325,6 +329,27 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             .comm_handler(RequestType::Read, 0x65A4, 0x00)?
             .ok_or(anyhow!("Expected data in response got none."))?;
         Ok(data == 1)
+    }
+}
+
+/* WRITE METHODS */
+impl CryomechApiSmdp<Box<dyn SerialPort>> {
+    /// Clears the min/max values for both pressure and temp
+    pub fn clear_press_temp_min_max(&mut self) -> Result<()> {
+        let _ = self.comm_handler(RequestType::Write(0x0001), 0xD3DB, 0x00)?;
+        Ok(())
+    }
+    /// Activates the compressor. Returns true if verification successful.
+    pub fn start_compressor(&mut self) -> Result<bool> {
+        let _ = self.comm_handler(RequestType::Write(0x0001), 0xD501, 0x00)?;
+        std::thread::sleep(Duration::from_secs(1));
+        self.comp_on()
+    }
+    /// Deactivates the compressor. Returns true if verification successful.
+    pub fn stop_compressor(&mut self) -> Result<bool> {
+        let _ = self.comm_handler(RequestType::Write(0x0000), 0xC598, 0x00)?;
+        std::thread::sleep(Duration::from_secs(1));
+        self.comp_on().map(|b| !b)
     }
 }
 
