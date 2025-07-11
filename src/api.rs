@@ -112,11 +112,11 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
 /* READ-ONLY METHODS */
 impl CryomechApiSmdp<Box<dyn SerialPort>> {
     /// Firmware checksum
-    pub fn fw_checksum(&mut self) -> Result<String> {
+    pub fn fw_checksum(&mut self) -> Result<u32> {
         let data = self
             .comm_handler(RequestType::Read, 0x2B0D, 0x00)?
             .ok_or(anyhow!("Expected data in response got none."))?;
-        Ok(String::from_utf8(u32::to_be_bytes(data).into())?)
+        Ok(data)
     }
     /// True if nonvolatile memory was lost
     pub fn mem_loss(&mut self) -> Result<bool> {
