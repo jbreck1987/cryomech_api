@@ -244,47 +244,87 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
     }
     /// In PSI Absolute
     pub fn high_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0xAA50, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn low_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0xAA50, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn max_high_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x7A62, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn max_low_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x7A62, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn min_high_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x5E0B, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn min_low_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x5E0B, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn avg_high_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x7E90, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
     pub fn avg_low_side_pressure(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0xBB94, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
-    /// In PSI Absolute
+    /// Also known as "bounce". In PSI Absolute
     pub fn high_side_pressure_deriv(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x66FA, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
+    }
+    /// Average difference in High/Low side pressures in PSI Absolute.
+    pub fn avg_delta_pressure(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x319C, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// True if the compressor is actively running
     pub fn comp_on(&mut self) -> Result<bool> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x5F95, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
     }
     /// True indicates one or more active errors or warnings.
     pub fn err_code_status(&mut self) -> Result<bool> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x65A4, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
     }
 }
 
