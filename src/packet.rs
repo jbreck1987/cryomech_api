@@ -57,9 +57,6 @@ impl CPacketSmdp {
     pub(crate) fn set_srlno(&mut self, srlno: u8) {
         self.srlno = Some(srlno)
     }
-    pub(crate) fn get_srlno(&self) -> Option<u8> {
-        self.srlno
-    }
 }
 impl From<CPacketSmdp> for SmdpPacketV1 {
     fn from(cpkt: CPacketSmdp) -> Self {
