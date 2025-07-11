@@ -3,7 +3,7 @@
 use crate::packet::{CPacketSmdp, RequestType};
 use anyhow::{Result, anyhow};
 use serialport::SerialPort;
-use smdp::{PacketFormat, SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
+use smdp::{SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
 use std::io::{Read, Write};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,7 +91,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
                 }
             }
         };
-        // Extract data and return (if read-only), otherwise return None.
+        // Extract data and return (if read-only).
         if is_read {
             resp_cpkt.extract_data().map(Some)
         } else {
@@ -104,114 +104,178 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
 impl CryomechApiSmdp<Box<dyn SerialPort>> {
     /// Firmware checksum
     pub fn fw_checksum(&mut self) -> Result<String> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x2B0D, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(String::from_utf8(u32::to_be_bytes(data).into())?)
     }
     /// True if nonvolatile memory was lost
     pub fn mem_loss(&mut self) -> Result<bool> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x801A, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
     }
     /// CPU temperature (°C)
     pub fn cpu_temp(&mut self) -> Result<f32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x3574, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32)
     }
     /// True if clock battery OK
     pub fn clock_batt_ok(&mut self) -> Result<bool> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0xA37A, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
     }
     /// True if clock battery low
     pub fn clock_batt_low(&mut self) -> Result<bool> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x0B8B, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
     }
     /// Elapsed compressor minutes
     pub fn comp_minutes(&mut self) -> Result<u32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x454C, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data)
     }
     /// Compressor motor current draw, in Amps
     pub fn motor_current_amps(&mut self) -> Result<u32> {
-        todo!()
+        let data = self
+            .comm_handler(RequestType::Read, 0x638B, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data)
     }
     /// In °C
-    pub fn input_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn input_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x0D8F, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn output_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn output_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x0D8F, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn helium_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn helium_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x0D8F, 0x02)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn oil_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn oil_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x0D8F, 0x03)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_input_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn min_input_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x6E58, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_output_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn min_output_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x6E58, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_helium_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn min_helium_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x6E58, 0x02)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_oil_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn min_oil_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x6E58, 0x03)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_input_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn max_input_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x8A1C, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_output_water_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn max_output_water_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x8A1C, 0x01)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_helium_temp(&mut self) -> Result<u32> {
-        todo!()
+    pub fn max_helium_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x8A1C, 0x02)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_oil_temp(&mut self) -> Result<u32> {
+    pub fn max_oil_temp(&mut self) -> Result<f32> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x8A1C, 0x03)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data as f32 * 0.1)
+    }
+    /// True if a temperature sensor has failed
+    pub fn temp_sensor_fail(&mut self) -> Result<bool> {
+        let data = self
+            .comm_handler(RequestType::Read, 0x6E2D, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
+    }
+    /// In PSI Absolute
+    pub fn high_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn high_side_pressure(&mut self) -> Result<u32> {
+    pub fn low_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn low_side_pressure(&mut self) -> Result<u32> {
+    pub fn max_high_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn max_high_side_pressure(&mut self) -> Result<u32> {
+    pub fn max_low_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn max_low_side_pressure(&mut self) -> Result<u32> {
+    pub fn min_high_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn min_high_side_pressure(&mut self) -> Result<u32> {
+    pub fn min_low_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn min_low_side_pressure(&mut self) -> Result<u32> {
+    pub fn avg_high_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn avg_high_side_pressure(&mut self) -> Result<u32> {
+    pub fn avg_low_side_pressure(&mut self) -> Result<f32> {
         todo!()
     }
     /// In PSI Absolute
-    pub fn avg_low_side_pressure(&mut self) -> Result<u32> {
-        todo!()
-    }
-    /// In PSI Absolute
-    pub fn high_side_pressure_deriv(&mut self) -> Result<u32> {
+    pub fn high_side_pressure_deriv(&mut self) -> Result<f32> {
         todo!()
     }
     /// True if the compressor is actively running
