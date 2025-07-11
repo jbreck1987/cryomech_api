@@ -1,8 +1,9 @@
 /* The user facing API for communication with Cryomech compressors */
 
-use anyhow::Result;
+use crate::packet::{CPacketSmdp, RequestType};
+use anyhow::{Result, anyhow};
 use serialport::SerialPort;
-use smdp::SmdpPacketHandler;
+use smdp::{PacketFormat, SmdpPacketHandler, SmdpPacketV1, SmdpPacketV2, format::ResponseCode};
 use std::io::{Read, Write};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,7 +22,7 @@ pub struct CryomechApiSmdp<T: Read + Write> {
     com_port: String,
     dev_addr: u8,
     version: SmdpVersion,
-    srlno: usize,
+    srlno: u8,
 }
 impl CryomechApiSmdp<Box<dyn SerialPort>> {
     pub fn new(
@@ -42,6 +43,60 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             version,
             srlno: 0x17,
         })
+    }
+    /// Increments SRLNO using appropriate logic (valid SRLNO: [16 - 255]). Returns the current
+    /// value of the srlno for use.
+    fn increment_srlno(&mut self) -> u8 {
+        let ret = self.srlno;
+        if self.srlno == u8::MAX {
+            self.srlno = 0x11
+        } else {
+            self.srlno += 1;
+        }
+        ret
+    }
+    /// Helper function that writes/reads to/from the wire and handles
+    /// SMDP protocol error checking
+    fn comm_handler(
+        &mut self,
+        req_type: RequestType,
+        hashval: u16,
+        array_idx: u8,
+    ) -> Result<Option<u32>> {
+        let is_read = matches!(req_type, RequestType::Read);
+        let mut cpkt = CPacketSmdp::new(self.dev_addr, None, req_type, hashval, array_idx);
+
+        // Write and read to/from wire and convert back into CPacketSmdp
+        let resp_cpkt: CPacketSmdp = match self.version {
+            SmdpVersion::V1 => {
+                let req_smdp: SmdpPacketV1 = cpkt.into();
+                self.smdp_handler.write_once(&req_smdp)?;
+                let resp_smdp: SmdpPacketV1 = self.smdp_handler.poll_once()?;
+                match resp_smdp.rsp()? {
+                    ResponseCode::Ok => resp_smdp.into(),
+                    other => return Err(anyhow!("RSP not OK: {:?}", other)),
+                }
+            }
+            SmdpVersion::V2Plus => {
+                cpkt.set_srlno(self.increment_srlno());
+                let req_smdp: SmdpPacketV2 = cpkt.try_into().expect("Just set srlno");
+                self.smdp_handler.write_once(&req_smdp)?;
+                let resp_smdp: SmdpPacketV2 = self.smdp_handler.poll_once()?;
+                if resp_smdp.srlno() != req_smdp.srlno() {
+                    return Err(anyhow!("SRLNO mismatch"));
+                }
+                match resp_smdp.rsp()? {
+                    ResponseCode::Ok => resp_smdp.into(),
+                    other => return Err(anyhow!("RSP not OK: {:?}", other)),
+                }
+            }
+        };
+        // Extract data and return (if read-only), otherwise return None.
+        if is_read {
+            resp_cpkt.extract_data().map(Some)
+        } else {
+            Ok(None)
+        }
     }
 }
 
