@@ -10,6 +10,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Flags the SMDP frame format to be used.
 pub enum SmdpVersion {
     // Version 1 has no SRLNO field
     V1,
@@ -47,6 +48,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             srlno: 0x17,
         })
     }
+    /// In ms
     pub fn read_timeout(&self) -> usize {
         self.read_timeout
     }
@@ -358,6 +360,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
     }
 }
 
+/// Builder for the SMDP API type
 pub struct CryomechApiSmdpBuilder {
     read_timeout: usize,
     baud: u32,

@@ -40,6 +40,9 @@ impl CPacketSmdp {
         }
         Self { addr, data, srlno }
     }
+    /// Extracts the data portion of a well-formed reply based on
+    /// the Cryomech data model. Should either be 4 bytes (BE) or
+    /// null.
     pub(crate) fn extract_data(&self) -> Result<u32> {
         // A well-formed response containing data should be 8-bytes
         if self.data.len() == 8 {
@@ -54,6 +57,7 @@ impl CPacketSmdp {
             ))
         }
     }
+    /// Sets the SRLNO of a packet. Used with SMDP versions >= 2.
     pub(crate) fn set_srlno(&mut self, srlno: u8) {
         self.srlno = Some(srlno)
     }
