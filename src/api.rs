@@ -12,10 +12,10 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Flags the SMDP frame format to be used.
 pub enum SmdpVersion {
-    // Version 1 has no SRLNO field
-    V1,
-    // Versions 2 and above have SRLNO field
-    V2Plus,
+    // Version 2 has no SRLNO field
+    V2,
+    // Versions 3 and above have SRLNO field
+    V3Plus,
 }
 
 /// SMDP API to Cryomech devices. Assumes point-to-point communication, not multi-drop.
@@ -79,7 +79,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
 
         // Write and read to/from wire and convert back into CPacketSmdp
         let resp_cpkt: CPacketSmdp = match self.version {
-            SmdpVersion::V1 => {
+            SmdpVersion::V2 => {
                 let req_smdp: SmdpPacketV2 = cpkt.into();
                 self.smdp_handler.write_once(&req_smdp)?;
                 let resp_smdp: SmdpPacketV2 = self.smdp_handler.poll_once()?;
@@ -88,7 +88,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
                     other => return Err(anyhow!("RSP not OK: {:?}", other)),
                 }
             }
-            SmdpVersion::V2Plus => {
+            SmdpVersion::V3Plus => {
                 cpkt.set_srlno(self.increment_srlno());
                 let req_smdp: SmdpPacketV3 = cpkt.try_into().expect("Just set srlno");
                 self.smdp_handler.write_once(&req_smdp)?;
@@ -377,7 +377,7 @@ impl CryomechApiSmdpBuilder {
             com_port: com_port.into(),
             dev_addr: 0x10,
             max_framesize: 64,
-            version: SmdpVersion::V1,
+            version: SmdpVersion::V2,
         }
     }
     pub fn read_timeout_ms(mut self, timeout: usize) -> Self {
