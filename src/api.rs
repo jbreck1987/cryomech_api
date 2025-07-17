@@ -253,6 +253,13 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
             .ok_or(anyhow!("Expected data in response got none."))?;
         Ok(data == 1)
     }
+    /// True if a pressure sensor has failed
+    pub fn pressure_sensor_fail(&mut self) -> Result<bool> {
+        let data = self
+            .comm_handler(RequestType::Read, 0xF82B, 0x00)?
+            .ok_or(anyhow!("Expected data in response got none."))?;
+        Ok(data == 1)
+    }
     /// In PSI Absolute
     pub fn high_side_pressure(&mut self) -> Result<f32> {
         let data = self
