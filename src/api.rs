@@ -1,7 +1,9 @@
 /* The user facing API for communication with Cryomech compressors */
 
-use crate::packet::{CPacketSmdp, RequestType};
-use anyhow::{Result, anyhow};
+use crate::{
+    CResult, Error,
+    packet::{CPacketSmdp, RequestType},
+};
 use serialport::SerialPort;
 use smdp::{SmdpPacketHandler, SmdpPacketV2, SmdpPacketV3, format::ResponseCode};
 use std::{
@@ -36,9 +38,11 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         dev_addr: u8,
         max_framesize: usize,
         version: SmdpVersion,
-    ) -> Result<Self> {
+    ) -> CResult<Self> {
         // Build serialport instance then self
-        let io = serialport::new(com_port, baud).open()?;
+        let io = serialport::new(com_port, baud)
+            .open()
+            .map_err(|e| Error::Io(e.to_string()))?;
         Ok(Self {
             smdp_handler: SmdpPacketHandler::new(io, read_timeout_ms, max_framesize),
             read_timeout: read_timeout_ms,
@@ -73,7 +77,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         req_type: RequestType,
         hashval: u16,
         array_idx: u8,
-    ) -> Result<Option<u32>> {
+    ) -> CResult<Option<u32>> {
         let is_read = matches!(req_type, RequestType::Read);
         let mut cpkt = CPacketSmdp::new(self.dev_addr, None, req_type, hashval, array_idx);
 
@@ -81,24 +85,34 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         let resp_cpkt: CPacketSmdp = match self.version {
             SmdpVersion::V2 => {
                 let req_smdp: SmdpPacketV2 = cpkt.into();
-                self.smdp_handler.write_once(&req_smdp)?;
-                let resp_smdp: SmdpPacketV2 = self.smdp_handler.poll_once()?;
-                match resp_smdp.rsp()? {
+                self.smdp_handler
+                    .write_once(&req_smdp)
+                    .map_err(Error::propagate_smdp_io)?;
+                let resp_smdp: SmdpPacketV2 = self
+                    .smdp_handler
+                    .poll_once()
+                    .map_err(Error::propagate_smdp_io)?;
+                match resp_smdp.rsp().map_err(|e| Error::Smdp(e.to_string()))? {
                     ResponseCode::Ok => resp_smdp.into(),
-                    other => return Err(anyhow!("RSP not OK: {:?}", other)),
+                    other => return Err(Error::InvalidFormat(format!("RSP not OK: {:?}", other))),
                 }
             }
             SmdpVersion::V3Plus => {
                 cpkt.set_srlno(self.increment_srlno());
                 let req_smdp: SmdpPacketV3 = cpkt.try_into().expect("Just set srlno");
-                self.smdp_handler.write_once(&req_smdp)?;
-                let resp_smdp: SmdpPacketV3 = self.smdp_handler.poll_once()?;
+                self.smdp_handler
+                    .write_once(&req_smdp)
+                    .map_err(Error::propagate_smdp_io)?;
+                let resp_smdp: SmdpPacketV3 = self
+                    .smdp_handler
+                    .poll_once()
+                    .map_err(Error::propagate_smdp_io)?;
                 if resp_smdp.srlno() != req_smdp.srlno() {
-                    return Err(anyhow!("SRLNO mismatch"));
+                    return Err(Error::InvalidFormat("SRLNO mismatch".to_string()));
                 }
-                match resp_smdp.rsp()? {
+                match resp_smdp.rsp().map_err(|e| Error::Smdp(e.to_string()))? {
                     ResponseCode::Ok => resp_smdp.into(),
-                    other => return Err(anyhow!("RSP not OK: {:?}", other)),
+                    other => return Err(Error::InvalidFormat(format!("RSP not OK: {:?}", other))),
                 }
             }
         };
@@ -114,234 +128,300 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
 /* READ-ONLY METHODS */
 impl CryomechApiSmdp<Box<dyn SerialPort>> {
     /// Firmware checksum
-    pub fn fw_checksum(&mut self) -> Result<u32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x2B0D, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn fw_checksum(&mut self) -> CResult<u32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x2B0D, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data)
     }
     /// True if nonvolatile memory was lost
-    pub fn mem_loss(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x801A, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn mem_loss(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x801A, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// CPU temperature (°C)
-    pub fn cpu_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x3574, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn cpu_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x3574, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// True if clock battery OK
-    pub fn clock_batt_ok(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0xA37A, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn clock_batt_ok(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0xA37A, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// True if clock battery low
-    pub fn clock_batt_low(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x0B8B, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn clock_batt_low(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x0B8B, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// Elapsed compressor minutes
-    pub fn comp_minutes(&mut self) -> Result<u32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x454C, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn comp_minutes(&mut self) -> CResult<u32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x454C, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data)
     }
     /// Compressor motor current draw, in Amps
-    pub fn motor_current_amps(&mut self) -> Result<u32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x638B, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn motor_current_amps(&mut self) -> CResult<u32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x638B, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data)
     }
     /// In °C
-    pub fn input_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x0D8F, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn input_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x0D8F, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn output_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x0D8F, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn output_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x0D8F, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn helium_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x0D8F, 0x02)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn helium_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x0D8F, 0x02)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn oil_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x0D8F, 0x03)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn oil_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x0D8F, 0x03)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_input_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x6E58, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_input_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x6E58, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_output_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x6E58, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_output_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x6E58, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_helium_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x6E58, 0x02)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_helium_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x6E58, 0x02)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn min_oil_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x6E58, 0x03)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_oil_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x6E58, 0x03)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_input_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x8A1C, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_input_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x8A1C, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_output_water_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x8A1C, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_output_water_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x8A1C, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_helium_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x8A1C, 0x02)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_helium_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x8A1C, 0x02)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In °C
-    pub fn max_oil_temp(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x8A1C, 0x03)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_oil_temp(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x8A1C, 0x03)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// True if a temperature sensor has failed
-    pub fn temp_sensor_fail(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x6E2D, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn temp_sensor_fail(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x6E2D, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// True if a pressure sensor has failed
-    pub fn pressure_sensor_fail(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0xF82B, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn pressure_sensor_fail(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0xF82B, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// In PSI Absolute
-    pub fn high_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0xAA50, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn high_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0xAA50, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn low_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0xAA50, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn low_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0xAA50, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn max_high_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x7A62, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_high_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x7A62, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn max_low_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x7A62, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn max_low_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x7A62, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn min_high_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x5E0B, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_high_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x5E0B, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn min_low_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x5E0B, 0x01)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn min_low_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x5E0B, 0x01)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn avg_high_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x7E90, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn avg_high_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x7E90, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// In PSI Absolute
-    pub fn avg_low_side_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0xBB94, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn avg_low_side_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0xBB94, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// Also known as "bounce". In PSI Absolute
-    pub fn high_side_pressure_deriv(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x66FA, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn high_side_pressure_deriv(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x66FA, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// Average difference in High/Low side pressures in PSI Absolute.
-    pub fn avg_delta_pressure(&mut self) -> Result<f32> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x319C, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn avg_delta_pressure(&mut self) -> CResult<f32> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x319C, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data as f32 * 0.1)
     }
     /// True if the compressor is actively running
-    pub fn comp_on(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x5F95, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn comp_on(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x5F95, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
     /// True indicates one or more active errors or warnings.
-    pub fn err_code_status(&mut self) -> Result<bool> {
-        let data = self
-            .comm_handler(RequestType::Read, 0x65A4, 0x00)?
-            .ok_or(anyhow!("Expected data in response got none."))?;
+    pub fn err_code_status(&mut self) -> CResult<bool> {
+        let data =
+            self.comm_handler(RequestType::Read, 0x65A4, 0x00)?
+                .ok_or(Error::InvalidFormat(
+                    "Expected data in response, got none.".to_string(),
+                ))?;
         Ok(data == 1)
     }
 }
@@ -349,18 +429,18 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
 /* WRITE METHODS */
 impl CryomechApiSmdp<Box<dyn SerialPort>> {
     /// Clears the min/max values for both pressure and temp
-    pub fn clear_press_temp_min_max(&mut self) -> Result<()> {
+    pub fn clear_press_temp_min_max(&mut self) -> CResult<()> {
         let _ = self.comm_handler(RequestType::Write(0x0001), 0xD3DB, 0x00)?;
         Ok(())
     }
     /// Activates the compressor. Returns true if verification successful.
-    pub fn start_compressor(&mut self) -> Result<bool> {
+    pub fn start_compressor(&mut self) -> CResult<bool> {
         let _ = self.comm_handler(RequestType::Write(0x0001), 0xD501, 0x00)?;
         std::thread::sleep(Duration::from_secs(1));
         self.comp_on()
     }
     /// Deactivates the compressor. Returns true if verification successful.
-    pub fn stop_compressor(&mut self) -> Result<bool> {
+    pub fn stop_compressor(&mut self) -> CResult<bool> {
         let _ = self.comm_handler(RequestType::Write(0x0000), 0xC598, 0x00)?;
         std::thread::sleep(Duration::from_secs(1));
         self.comp_on().map(|b| !b)
@@ -407,7 +487,7 @@ impl CryomechApiSmdpBuilder {
         self.max_framesize = size;
         self
     }
-    pub fn build(self) -> Result<CryomechApiSmdp<Box<dyn SerialPort>>> {
+    pub fn build(self) -> CResult<CryomechApiSmdp<Box<dyn SerialPort>>> {
         CryomechApiSmdp::new(
             &self.com_port,
             self.baud,

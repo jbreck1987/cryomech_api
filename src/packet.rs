@@ -1,7 +1,8 @@
 /* Defines an abstraction over the link protocols that handles specifics related to the Cryomech API */
 
-use anyhow::{Result, anyhow};
 use smdp::{SmdpPacketV2, SmdpPacketV3};
+
+use crate::{CResult, Error};
 
 const SMDP_OPCODE: u8 = 0x80;
 pub(crate) enum RequestType {
@@ -43,17 +44,19 @@ impl CPacketSmdp {
     /// Extracts the data portion of a well-formed reply based on
     /// the Cryomech data model. Should either be 4 bytes (BE) or
     /// null.
-    pub(crate) fn extract_data(&self) -> Result<u32> {
+    pub(crate) fn extract_data(&self) -> CResult<u32> {
         // A well-formed response containing data should be 8-bytes
         if self.data.len() == 8 {
             self.data
                 .get(4..)
                 .and_then(|slice| slice.try_into().ok())
                 .map(u32::from_be_bytes)
-                .ok_or(anyhow!("Index into response data invalid."))
+                .ok_or(Error::InvalidFormat(
+                    "Index into response data invalid.".to_string(),
+                ))
         } else {
-            Err(anyhow!(
-                "Response is malformed or is not a response packet."
+            Err(Error::InvalidFormat(
+                "Response is malformed or is not a response packet.".to_string(),
             ))
         }
     }
@@ -68,13 +71,15 @@ impl From<CPacketSmdp> for SmdpPacketV2 {
     }
 }
 impl TryFrom<CPacketSmdp> for SmdpPacketV3 {
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn try_from(cpkt: CPacketSmdp) -> Result<Self, Self::Error> {
         if let Some(srlno) = cpkt.srlno {
             Ok(SmdpPacketV3::new(cpkt.addr, SMDP_OPCODE, srlno, cpkt.data))
         } else {
-            Err(anyhow!("Packet has no serial number."))
+            Err(Error::InvalidFormat(
+                "Packet has no serial number.".to_string(),
+            ))
         }
     }
 }
