@@ -42,7 +42,7 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
         // Build serialport instance then self
         let io = serialport::new(com_port, baud)
             .open()
-            .map_err(|e| Error::Io(e.to_string()))?;
+            .map_err(|e| Error::Serial(e))?;
         Ok(Self {
             smdp_handler: SmdpPacketHandler::new(io, read_timeout_ms, max_framesize),
             read_timeout: read_timeout_ms,
@@ -87,12 +87,10 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
                 let req_smdp: SmdpPacketV2 = cpkt.into();
                 self.smdp_handler
                     .write_once(&req_smdp)
-                    .map_err(Error::propagate_smdp_io)?;
-                let resp_smdp: SmdpPacketV2 = self
-                    .smdp_handler
-                    .poll_once()
-                    .map_err(Error::propagate_smdp_io)?;
-                match resp_smdp.rsp().map_err(|e| Error::Smdp(e.to_string()))? {
+                    .map_err(|e| Error::Smdp(e))?;
+                let resp_smdp: SmdpPacketV2 =
+                    self.smdp_handler.poll_once().map_err(|e| Error::Smdp(e))?;
+                match resp_smdp.rsp().map_err(|e| Error::Smdp(e))? {
                     ResponseCode::Ok => resp_smdp.into(),
                     other => return Err(Error::InvalidFormat(format!("RSP not OK: {:?}", other))),
                 }
@@ -102,15 +100,13 @@ impl CryomechApiSmdp<Box<dyn SerialPort>> {
                 let req_smdp: SmdpPacketV3 = cpkt.try_into().expect("Just set srlno");
                 self.smdp_handler
                     .write_once(&req_smdp)
-                    .map_err(Error::propagate_smdp_io)?;
-                let resp_smdp: SmdpPacketV3 = self
-                    .smdp_handler
-                    .poll_once()
-                    .map_err(Error::propagate_smdp_io)?;
+                    .map_err(|e| Error::Smdp(e))?;
+                let resp_smdp: SmdpPacketV3 =
+                    self.smdp_handler.poll_once().map_err(|e| Error::Smdp(e))?;
                 if resp_smdp.srlno() != req_smdp.srlno() {
                     return Err(Error::InvalidFormat("SRLNO mismatch".to_string()));
                 }
-                match resp_smdp.rsp().map_err(|e| Error::Smdp(e.to_string()))? {
+                match resp_smdp.rsp().map_err(|e| Error::Smdp(e))? {
                     ResponseCode::Ok => resp_smdp.into(),
                     other => return Err(Error::InvalidFormat(format!("RSP not OK: {:?}", other))),
                 }
