@@ -1,4 +1,5 @@
 /* Defines an abstraction over the link protocols that handles specifics related to the Cryomech API */
+// TODO: Add Modbus support
 
 use smdp::{SmdpPacketV2, SmdpPacketV3};
 
